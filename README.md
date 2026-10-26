@@ -1,53 +1,55 @@
-# Get Next Line (GNL)
+# get_next_line
 
-## 📖 À propos du projet
-**Get Next Line** est un projet de l'école 42. Le but est de créer une fonction en C qui permet de lire une ligne terminée par un retour à la ligne (`\n`) depuis un descripteur de fichier (`fd`). Ce projet introduit la notion de variables statiques et permet d'en apprendre davantage sur la gestion de la mémoire et les entrées/sorties en C.
+*[Version française](README.fr.md)*
 
-## 🚀 Fonctionnalités
-- Lecture ligne par ligne depuis un fichier, l'entrée standard ou tout autre descripteur de fichier valide.
-- Gestion correcte de la mémoire (aucune fuite).
-- Compilation avec une taille de buffer modulable via la macro `BUFFER_SIZE`.
+Read a file descriptor one line at a time, in C. School 19 (42 network) project.
 
-## 🛠️ Prototype
 ```c
 char *get_next_line(int fd);
 ```
-- **Paramètre** : `fd` - Le descripteur de fichier (File Descriptor) sur lequel lire.
-- **Valeur de retour** :
-  - La ligne lue si tout se passe bien.
-  - `NULL` s'il n'y a plus rien à lire ou si une erreur s'est produite.
 
-## ⚙️ Compilation et Utilisation
+Each call returns the next line, newline included, or `NULL` at the end of the file or on a read error.
+The caller frees each line.
 
-Pour utiliser la fonction dans votre propre programme, vous devez compiler vos fichiers avec *get_next_line.c* et *get_next_line_utils.c*.
+```c
+int   fd = open("notes.txt", O_RDONLY);
+char *line;
 
-Vous pouvez définir la taille du buffer lors de la compilation :
+while ((line = get_next_line(fd)) != NULL)
+{
+    printf("%s", line);
+    free(line);
+}
+close(fd);
+```
+
+## How it works
+
+- `read` fills a buffer of `BUFFER_SIZE` bytes, chosen at compile time (`-D BUFFER_SIZE=42`, default 200,
+  capped at 1,000,000).
+- What has been read but not returned yet is kept in a `static` string between calls. Reading stops as soon
+  as that string holds a `\n`.
+- The function then splits it: the line is returned, the rest stays for the next call. When nothing is
+  left, the static string is freed, so a file read to the end leaves no allocation behind.
+- One file descriptor at a time: the bonus version that tracks several descriptors is not part of this one.
+
+## Tested
+
+The output of a small reader program was compared byte for byte with the original file, with
+`BUFFER_SIZE` set to 1, 42, 4,096 and 1,000,000, and AddressSanitizer enabled:
+
+| Input | Result |
+|---|---|
+| empty file, one long line without `\n`, lines with and without a final `\n` | identical |
+| 100,000 short lines, a single 27 KB line | identical |
+| standard input (`fd` 0), a descriptor that failed to open | lines read / `NULL` |
+
+No memory error or leak was reported.
+
+## Build
+
 ```bash
 cc -Wall -Wextra -Werror -D BUFFER_SIZE=42 main.c get_next_line.c get_next_line_utils.c
 ```
 
-### Exemple (`main.c`) :
-```c
-#include <fcntl.h>
-#include <stdio.h>
-#include "get_next_line.h"
-
-int main(void)
-{
-    int fd = open("test.txt", O_RDONLY);
-    char *line;
-
-    if (fd < 0)
-        return (1);
-    while ((line = get_next_line(fd)) != NULL)
-    {
-        printf("%s", line);
-        free(line);
-    }
-    close(fd);
-    return (0);
-}
-```
-
-## 👨‍💻 Auteur
-Développé par [huburton](mailto:huburton@student.s19.fr) pour le cursus 42.
+`main.c` reads the sample files in `files/`.
